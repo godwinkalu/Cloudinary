@@ -89,6 +89,14 @@ exports.updateUser = async (req,res)=>{
     const {id} = req.params
     const file = req.file
     const {fullName,email,gender} = req.body
+    const existingUser = await usermodel.findById(id)
+    if (!existingUser) {
+      fs.unlinkSync(file.path)
+      return res.status(404).json({
+        message:'user not found'
+      })
+    }
+    const oldPublicId = existingUser.profilePicture?.publicId
     const resource =  await cloudinary.uploader.upload(file.path)
     const images = {
       url:resource.secure_url,
@@ -96,12 +104,10 @@ exports.updateUser = async (req,res)=>{
     }
     const data = {fullName,email:email?.toLowerCase(), gender,profilePicture:images}
     const updatedUser = await usermodel.findByIdAndUpdate(id,data,{new:true})
-    if (!updatedUser) {
-      return res.status(404).json({
-        message:'user not found'
-      })
+    if (oldPublicId) {
+      await cloudinary.uploader.destroy(oldPublicId)
     }
-    await cloudinary.uploader.destroy(updatedUser.profilePicture.publicId)
+    
     fs.unlinkSync(file.path)
     return res.status(200).json({
       message:'user updated successfully',

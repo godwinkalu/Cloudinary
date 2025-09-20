@@ -97,23 +97,35 @@ exports.updateProduct  = async (req,res)=>{
     const {id} =  req.params
     const {name,description,price} =  req.body;
     const files = req.files
-    const imageDetails = [];
-    for(const image of files){
-     const resource= await cloudinary.uploader.upload(image.path);
-     const images = {
+    
+    const checkExistingProduct = await product.findById(id)
+    if (!checkExistingProduct) {
+     for(const img of files){
+       fs.unlinkSync(img.path)
+     }
+     return res.status(404).json({
+      message:'product not found'
+     })
+    }
+    const oldimagePublicIds = checkExistingProduct.images?.map((el)=>el.publicId)
+    const imageArr  = []
+
+    for(const img of files){
+     const resource= await cloudinary.uploader.upload(img.path);
+     const image = {
       url:resource.secure_url,
       publicId:resource.public_id
      }
-     const data = {name,description,price,profilePicture:images}
+     imageArr.push(image)
+
+     fs.unlinkSync(img.path)
+
+     const data = {name,description,price,images:imageArr}
      const updatedProduct = await productmodel.findByIdAndUpdate(id,data,{new:true})
-     if (!updatedProduct) {
-      return res.status(404).json({
-        message:'user not found'
-      })
+     for(const publicId of oldimagePublicIds){
+      await cloudinary.uploader.destroy(publicId)
+      
      }
-     await cloudinary.uploader.destroy(updatedProduct.profilePicture.publicId)
-      imageDetails.push(fileInfo)
-    fs.unlinkSync(images.path)
 
     }
     return  res.status(200).json({
@@ -122,7 +134,10 @@ exports.updateProduct  = async (req,res)=>{
     })
 
   } catch (error) {
-    res.status(500).json({
+    for(const img of files){
+     fs.unlinkSync(img.path)
+    }
+return res.status(500).json({
       message:error.message
     })
   }
